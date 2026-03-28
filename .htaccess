@@ -1,0 +1,215 @@
+# WBM Constructions - Apache Configuration
+# For Hostinger deployment of Next.js static export
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # ================================================================
+    # FORCE HTTPS
+    # ================================================================
+
+    # Redirect HTTP to HTTPS
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+    # ================================================================
+    # STATIC ASSET HANDLING - MUST COME FIRST
+    # ================================================================
+
+    # Allow direct access to _next directory (Next.js static assets)
+    RewriteCond %{REQUEST_URI} ^/_next/ [NC]
+    RewriteRule ^ - [L]
+
+    # Allow direct access to API directory (PHP files)
+    RewriteCond %{REQUEST_URI} ^/api/ [NC]
+    RewriteRule ^ - [L]
+
+    # Allow direct access to image files
+    RewriteCond %{REQUEST_URI} \.(jpg|jpeg|png|gif|svg|ico|webp|avif)$ [NC]
+    RewriteRule ^ - [L]
+
+    # Allow direct access to font files
+    RewriteCond %{REQUEST_URI} \.(woff|woff2|ttf|otf|eot)$ [NC]
+    RewriteRule ^ - [L]
+
+    # Allow direct access to other static assets
+    RewriteCond %{REQUEST_URI} \.(css|js|json|xml|txt|pdf)$ [NC]
+    RewriteRule ^ - [L]
+
+    # ================================================================
+    # NEXT.JS ROUTING - HANDLE HTML FILES
+    # ================================================================
+
+    # Remove trailing slashes (except for root)
+    RewriteCond %{REQUEST_URI} !^/$
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^(.+)/$ /$1 [R=301,L]
+
+    # Serve .html files for clean URLs
+    # /about -> /about.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME}.html -f
+    RewriteRule ^(.*)$ $1.html [L]
+
+    # Handle dynamic routes: /services/1 -> /services/1.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(services|projects)/([^/]+)$ $1/$2.html [L]
+
+    # Fallback to 404 page
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ /404.html [L]
+
+</IfModule>
+
+# ================================================================
+# SECURITY HEADERS
+# ================================================================
+
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # Enable XSS protection
+    Header always set X-XSS-Protection "1; mode=block"
+
+    # Prevent MIME type sniffing
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Referrer policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Remove X-Powered-By header
+    Header unset X-Powered-By
+
+    # CORS for API endpoint
+    <FilesMatch "\.(php)$">
+        Header set Access-Control-Allow-Origin "*"
+        Header set Access-Control-Allow-Methods "POST, GET, OPTIONS"
+        Header set Access-Control-Allow-Headers "Content-Type, Authorization"
+    </FilesMatch>
+</IfModule>
+
+# ================================================================
+# SECURITY - BLOCK ACCESS TO SENSITIVE FILES
+# ================================================================
+
+# Block access to config files
+<FilesMatch "^(config\.php|\.env|package\.json|tsconfig\.json|next\.config\.)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Block access to hidden files (starting with .)
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Disable directory browsing
+Options -Indexes
+
+# ================================================================
+# PERFORMANCE - CACHING
+# ================================================================
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+
+    # HTML files - 1 day
+    ExpiresByType text/html "access plus 1 day"
+
+    # CSS and JavaScript - 1 year
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType text/javascript "access plus 1 year"
+
+    # Images - 1 year
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+
+    # Fonts - 1 year
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+    ExpiresByType application/font-woff2 "access plus 1 year"
+</IfModule>
+
+# Cache-Control headers
+<IfModule mod_headers.c>
+    # Cache static assets for 1 year
+    <FilesMatch "\.(js|css|woff|woff2|ttf|otf|eot|jpg|jpeg|png|gif|svg|ico|webp)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    # Cache HTML for 1 day with revalidation
+    <FilesMatch "\.(html)$">
+        Header set Cache-Control "public, max-age=86400, must-revalidate"
+    </FilesMatch>
+</IfModule>
+
+# ================================================================
+# COMPRESSION
+# ================================================================
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ================================================================
+# MIME TYPES
+# ================================================================
+
+<IfModule mod_mime.c>
+    # JavaScript
+    AddType application/javascript js
+
+    # JSON
+    AddType application/json json
+
+    # Fonts
+    AddType font/woff woff
+    AddType font/woff2 woff2
+
+    # Images
+    AddType image/svg+xml svg
+    AddType image/webp webp
+    AddType image/avif avif
+
+    # Default charset
+    AddDefaultCharset UTF-8
+</IfModule>
+
+# ================================================================
+# ERROR PAGES
+# ================================================================
+
+ErrorDocument 404 /404.html
+ErrorDocument 403 /404.html
+ErrorDocument 500 /404.html
+
+# Disable server signature
+ServerSignature Off
